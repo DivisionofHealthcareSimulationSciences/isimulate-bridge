@@ -4,9 +4,8 @@ AMM/MoHSES module for connecting to an iSimulate monitor on the local network.
 
 ## Dependencies
 
-The iSimulate Bridge requires the [AMM Standard Library](https://github.com/AdvancedModularManikin/amm-library) be built and available (see AMM lib dependencies). In addition to the AMM library dependencies, 
-
-iSimulate Bridge also requires:
+The iSimulate Bridge requires the [AMM Standard Library](https://github.com/AdvancedModularManikin/amm-library) be built and available (see AMM lib dependencies).
+The iSimulate Bridge module also requires:
 
 - avahi-core
 - avahi-client
