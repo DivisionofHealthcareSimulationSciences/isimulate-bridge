@@ -7,11 +7,10 @@ AMM/MoHSES module for connecting to an iSimulate monitor on the local network.
 The iSimulate Bridge requires the [AMM Standard Library](https://github.com/AdvancedModularManikin/amm-library) be built and available (see AMM lib dependencies).
 The iSimulate Bridge module also requires:
 
-- avahi-core
 - avahi-client
 - avahi-common
 
-`$ sudo apt install libavahi-client-dev libavahi-core-dev`
+`$ sudo apt install libavahi-client-dev`
 
 ## Installation
 
