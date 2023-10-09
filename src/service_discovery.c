@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 #include <avahi-client/client.h>
@@ -16,7 +17,7 @@
 
 static AvahiSimplePoll *simple_poll = NULL;
 
-char *monitor_address;
+char monitor_address[20];
 uint16_t monitor_port = 0;
 bool monitor_service_new = false;
 
@@ -64,7 +65,7 @@ static void resolve_callback(
                     // !!(flags & AVAHI_LOOKUP_RESULT_CACHED));
             monitor_service_new = true;
             monitor_port = port;
-            monitor_address = a;
+            strcpy(monitor_address, a);
             avahi_free(t);
         }
     }

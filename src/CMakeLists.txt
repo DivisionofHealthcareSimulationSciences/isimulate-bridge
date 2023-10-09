@@ -2,7 +2,11 @@
 # CMake - iSimulate Bridge - root/src
 #############################
 
-set(ISIMULATE_BRIDGE_SOURCES iSimulateBridge.cpp service_discovery.c)
+set(ISIMULATE_BRIDGE_SOURCES
+   iSimulateBridge.cpp
+   websocket_session.cpp
+   service_discovery.c
+   )
 
 add_executable(mohses_isimulate_bridge ${ISIMULATE_BRIDGE_SOURCES})
 

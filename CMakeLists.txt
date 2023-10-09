@@ -26,15 +26,20 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin)
 
-#add_compile_options(-std=c++14)
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-std=c++14>)
-add_compile_options(-O0)
+add_compile_options(-fvisibility=hidden -Os -flto)
+add_compile_options(-Wno-psabi)
 
-FIND_PACKAGE(Boost 1.67.0 REQUIRED COMPONENTS thread)
+set(Boost_USE_STATIC_LIBS OFF)
+set(Boost_USE_MULTITHREADED ON)
+
+find_package(Boost 1.67.0 REQUIRED COMPONENTS thread)
+include_directories(${Boost_INCLUDE_DIRS})
+link_directories(${Boost_LIBRARY_DIRS})
+
+find_package(RapidJSON REQUIRED)
 
 find_package(amm_std REQUIRED)
-
-include_directories(${Boost_INCLUDE_DIRS})
 
 add_subdirectory(src)
 

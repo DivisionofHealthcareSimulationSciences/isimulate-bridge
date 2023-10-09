@@ -12,13 +12,19 @@
 
 #include <argp.h>
 
+/// json library
+#include "rapidjson/document.h"
+#include "rapidjson/writer.h"
+
+#include "websocket_session.hpp"
+
 extern "C" {
    #include "service_discovery.h"
 }
 
 using namespace AMM;
-using namespace std;
 using namespace std::chrono;
+using namespace rapidjson;
 
 // debug settings
 bool debug_HF_data = false;
@@ -35,6 +41,14 @@ float breathrate = 0;
 float inflow;
 bool isSimRunning = false;
 
+// websocket session for asynchronous read/write to iSimulate device
+net::io_context ioc;
+auto ws_session = std::make_shared<websocket_session>(ioc);
+
+std::string host = "";
+std::string port = "";
+const std::string target = "/";
+
 struct arguments {
    bool render;
    bool phys;
@@ -42,6 +56,17 @@ struct arguments {
    bool tick;
    bool verbose;
 } arguments;
+
+
+// callback function for new data on websocket
+void onNewWebsocketMessage(const std::string body) {
+   // parse web socket message as json data
+   //std::string type, data, context;
+   //Document document;
+   //document.Parse(body.c_str());
+
+   LOG_DEBUG << "iSimulate message: " << body ;
+}
 
 void OnNewSimulationControl(AMM::SimulationControl& simControl, eprosima::fastrtps::SampleInfo_t* info) {
 
@@ -170,20 +195,10 @@ void PublishConfiguration() {
 void checkForExit() {
    // wait for key press
    std::cin.get();
-   isRunning = false;
    std::cout << "Key pressed ... Shutting down." << std::endl;
-}
 
-void signalHandler(int signum) {
-   LOG_WARNING << "Interrupt signal (" << signum << ") received.";
-
-   if (signum == 15) {
-      mgr->Shutdown();
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      delete mgr;
-      LOG_INFO << "Shutdown complete";
-   }
-   exit(signum);
+   // Raise SIGTERM to trigger async signal handler
+   std::raise(SIGTERM);
 }
 
 // set up command line option checking using argp.h
@@ -276,32 +291,53 @@ int main(int argc, char *argv[]) {
 
    // set up thread to check console for "exit" command
    std::thread ec(checkForExit);
+   ec.detach();
 
    // set up thread for service discovery
+   LOG_INFO << "iSimulate device discovery";
    std::thread sd(service_discovery);
    sd.detach();
 
-   // set up signal handler for termination by supervisor or similar process manager
-   signal(SIGINT, signalHandler);
-   signal(SIGTERM, signalHandler);
-
-   LOG_INFO << "iSimulate Bridge ready.";
-   std::cout << "Listening for data... Press return to exit." << std::endl;
-
-   while ( isRunning ) {
+   //TODO: turn discovery into asynch process see mycroft bridge
+   // block until iSimulate monitor has been discovered on the local network
+   while (true) {
       if ( monitor_port !=0 && monitor_service_new) {
          LOG_INFO << "Monitor port aquired: " << monitor_port;
          LOG_INFO << "Monitor address aquired: " << monitor_address;
+         host = monitor_address;
+         port = std::to_string(monitor_port);
          monitor_service_new = false;
+         break;
       }
       std::this_thread::sleep_for(milliseconds(20));
    }
 
-   ec.join();
+   // set up websocket session
+   ws_session->run(host, port, target);
+   ws_session->registerReadCallback(onNewWebsocketMessage);
+
+   LOG_INFO << "iSimulate Bridge ready.";
+   std::cout << "Listening for data... Press return to exit." << std::endl;
+
+   // Capture SIGINT and SIGTERM to perform a clean shutdown
+   net::signal_set signals(ioc, SIGINT, SIGTERM);
+   signals.async_wait(
+      [](boost::system::error_code const&, int signum)
+      {
+         LOG_WARNING << "Interrupt signal (" << signum << ") received.";
+         // ask websocket session to close
+         ws_session->do_close();
+         // alternatively use ioc.stop() to stop the io_context. This will cause run() to return immediately
+      });
+
+   // Run the I/O context.
+   // The call will return when the socket is closed.
+   ioc.run();
 
    mgr->Shutdown();
    std::this_thread::sleep_for(milliseconds(100));
    delete mgr;
 
    LOG_INFO << "iSimulate Bridge shutdown.";
+   return EXIT_SUCCESS;
 }
