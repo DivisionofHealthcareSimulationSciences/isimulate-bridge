@@ -104,6 +104,11 @@ void websocket_session::on_handshake(error_code ec)
    if(ec) return fail(ec, "handshake");
    LOG_INFO << "websocket handshake successful";
 
+   if (handshakeCallback) handshakeCallback(beast::buffers_to_string(buffer_.data()));
+
+// Clear the buffer
+   buffer_.consume(buffer_.size());
+
    // read a message when available
    ws_.async_read(
       buffer_,
@@ -112,25 +117,48 @@ void websocket_session::on_handshake(error_code ec)
          shared_from_this()));
 }
 
-void websocket_session::do_write(std::string message)
-{
-   LOG_INFO << "websocket writing message:" << message;
-   // Send the message
-   ws_.async_write(
-      net::buffer(message),
-      beast::bind_front_handler(
-            &websocket_session::on_write,
-            shared_from_this()));
+void websocket_session::do_write(std::string message) {
+   if (!write_scheduled){
+      LOG_DEBUG << "websocket writing message:" << message;
+      // Send the message
+      ws_.async_write(
+         net::buffer(message),
+         beast::bind_front_handler(
+               &websocket_session::on_write,
+               shared_from_this()));
+      write_scheduled = true;
+   } else {
+      LOG_DEBUG << "websocket queuing message:" << message;
+      message_queue.push(message);
+   }
 }
 
 void websocket_session::on_write(
-   error_code ec,
-   std::size_t bytes_transferred)
-{
-   boost::ignore_unused(bytes_transferred);
+      error_code ec,
+      std::size_t bytes_transferred) {
 
+   boost::ignore_unused(bytes_transferred);
    if(ec) return fail(ec, "write");
-   //LOG_INFO << "websocket message written: " << bytes_transferred;
+   LOG_DEBUG << "websocket message written: " << bytes_transferred;
+   write_scheduled = false;
+
+   if (!message_queue.empty()){
+      std::string message = message_queue.front();
+      LOG_DEBUG << "websocket writing message from queue:" << message;
+      // Send the message
+      ws_.async_write(
+         net::buffer(message),
+         beast::bind_front_handler(
+               &websocket_session::on_write,
+               shared_from_this()));
+      write_scheduled = true;
+      message_queue.pop();
+   }
+}
+
+void websocket_session::registerHandshakeCallback(std::function<void(std::string)> cb)
+{
+   handshakeCallback = std::bind(cb, std::placeholders::_1);
 }
 
 void websocket_session::registerReadCallback(std::function<void(std::string)> cb)

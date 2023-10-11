@@ -68,6 +68,72 @@ void onNewWebsocketMessage(const std::string body) {
    LOG_DEBUG << "iSimulate message: " << body ;
 }
 
+// init iSimulate device
+void onWebsocketHandshake(const std::string body) {
+   std::string message;
+
+   // monitorState 3 = LifePak 15
+   message =  "{\"type\": \"ChangeMonitorPacket\",\"monitorState\": 3}";
+   LOG_DEBUG << "Writing message to iSimulate: " << message;
+   ws_session->do_write(message);
+
+   message =  "{\"type\": \"PowerOnPacket\"}";
+   LOG_DEBUG << "Writing message to iSimulate: " << message;
+   ws_session->do_write(message);
+
+   message =  "{\"type\": \"VisibilityPacket\","
+      "\"ecgVisible\": true,"
+      "\"bpVisible\": true,"
+      "\"spo2Visible\":true,"
+      "\"etco2Visible\": true,"
+      "\"rrVisible\": true,"
+      "\"tempVisible\": true,"
+      "\"custVisible1\": true,"
+      "\"custVisible2\": true,"
+      "\"custVisible3\": true,"
+      "\"cvpVisible\": true,"
+      "\"icpVisible\": true,"
+      "\"papVisible\": true,"
+      "}";
+   LOG_DEBUG << "Writing message to iSimulate: " << message;
+   ws_session->do_write(message);
+
+   // requestedState 1 = running
+   message =  "{\"type\": \"ScenarioChangeStatePacket\",\"requestedState\": 1}";
+   LOG_DEBUG << "Writing message to iSimulate: " << message;
+   ws_session->do_write(message);
+
+   message =  "{\"type\": \"NibpPacket\",\"subType\": 0,\"bpSys\": 120,\"bpDia\": 80}";
+   LOG_DEBUG << "Writing message to iSimulate: " << message;
+   ws_session->do_write(message);
+
+   // parameter update
+   message =  "{\"type\": \"ChangeActionPacket\","
+      "\"trendTime\": 0,"
+      "\"hr\":80,\"bpSys\":120,\"bpDia\":80,\"spo2\":92,"
+      "\"etco2\":44,\"respRate\":15,\"temp\":38.1,"
+      "\"cust1\":0,\"cust2\":0,\"cust3\":0,"
+      "\"cvp\":10,\"cvpWaveform\":0,\"cvpVisible\":true,\"cvpAmplitude\": 2,\"cvpVariation\": 1,"
+      "\"icp\":10,\"icpWaveform\":0,\"icpVisible\":true,\"icpAmplitude\": 2,\"icpVariation\": 1,"
+      "\"icpLundbergAEnabled\": false,\"icpLundbergBEnabled\": false,"
+      "\"papSys\":20,\"papDia\":10,\"papWaveform\": 0,\"papVisible\":true,\"papVariation\": 2,"
+      "\"ecgWaveform\": 9,\"bpWaveform\": 0,\"spo2Waveform\": 0,\"etco2Waveform\":0,"
+      "\"ecgVisible\": true,\"bpVisible\":true,\"spo2Visible\": true,"
+      "\"etco2Visible\": true,\"rrVisible\":    true,\"tempVisible\":  true,"
+      "\"custVisible1\": false,\"custVisible2\":false,\"custVisible3\":false,"
+      "\"custLabel1\":\"\",\"custLabel2\":\"\",\"custLabel3\":\"\","
+      "\"custMeasureLabel1\":\"\",\"custMeasureLabel2\":\"\",\"custMeasureLabel3\": \"\","
+      "\"ectopicsPac\": 0,\"ectopicsPjc\": 0,\"ectopicsPvc\": 0,"
+      "\"perfusion\":0,"
+      "\"electricalInterference\":false,\"articInterference\":0,\"svvInterference\":0,\"sinusArrhythmiaInterference\": 1,"
+      "\"ventilated\":false,"
+      "\"electrodeStatus\": [true, true, true, true, true, true, true, true, true, true,true, true]"
+      "}";
+   LOG_DEBUG << "Writing message to iSimulate: " << message;
+   ws_session->do_write(message);
+
+}
+
 void OnNewSimulationControl(AMM::SimulationControl& simControl, eprosima::fastrtps::SampleInfo_t* info) {
 
    switch (simControl.type()) {
@@ -314,6 +380,7 @@ int main(int argc, char *argv[]) {
 
    // set up websocket session
    ws_session->run(host, port, target);
+   ws_session->registerHandshakeCallback(onWebsocketHandshake);
    ws_session->registerReadCallback(onNewWebsocketMessage);
 
    LOG_INFO << "iSimulate Bridge ready.";

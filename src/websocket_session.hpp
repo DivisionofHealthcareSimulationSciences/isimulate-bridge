@@ -6,6 +6,8 @@
 #include <string>
 #include <iostream>
 #include <functional>
+#include <queue>
+#include <stdbool.h>
 
 #include <boost/asio.hpp>
 
@@ -31,6 +33,9 @@ class websocket_session : public std::enable_shared_from_this<websocket_session>
    std::string host_;
    std::string target_;
    std::function<void(std::string)> readCallback;
+   std::function<void(std::string)> handshakeCallback;
+   std::queue<std::string> message_queue;
+   bool write_scheduled = false;
 
    void fail(error_code ec, char const* what);
    void on_resolve(error_code ec, tcp::resolver::results_type results);
@@ -47,6 +52,7 @@ public:
 
    void run(std::string host, std::string port, std::string target);
    void registerReadCallback(std::function<void(std::string)> cb);
+   void registerHandshakeCallback(std::function<void(std::string)> cb);
    void do_write(std::string message);
    void do_close();
 };
