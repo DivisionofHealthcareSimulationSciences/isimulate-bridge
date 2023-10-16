@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include <cmath>
 
 #include <amm_std.h>
 #include <signal.h>
@@ -36,6 +37,17 @@ AMM::DDSManager<void>* mgr = new AMM::DDSManager<void>(configFile);
 AMM::UUID m_uuid;
 bool isRunning = true;
 
+//std::mutex nds_mutex;
+std::map<std::string, std::string> nodeDataStorage = {
+      {"Cardiovascular_HeartRate", "0"},
+      {"Cardiovascular_Arterial_Systolic_Pressure", "0"},
+      {"Cardiovascular_Arterial_Diastolic_Pressure", "0"},
+      {"BloodChemistry_Oxygen_Saturation", "0"},
+      {"Respiration_EndTidalCarbonDioxide", "0"},
+      {"Respiratory_Respiration_Rate", "0"},
+      {"Energy_Core_Temperature", "0"}
+   };
+
 // initialize module state
 float breathrate = 0;
 float inflow;
@@ -57,8 +69,38 @@ struct arguments {
    bool verbose;
 } arguments;
 
-
 // callback function for new data on websocket
+void writeDataToMonitor() {
+   std::string message =  "{\"type\": \"ChangeActionPacket\","
+      "\"trendTime\": 0"
+      ",\"hr\":" + nodeDataStorage["Cardiovascular_HeartRate"] +
+      ",\"bpSys\":" + nodeDataStorage["Cardiovascular_Arterial_Systolic_Pressure"] +
+      ",\"bpDia\":" + nodeDataStorage["Cardiovascular_Arterial_Diastolic_Pressure"] +
+      ",\"spo2\":" + nodeDataStorage["BloodChemistry_Oxygen_Saturation"] +
+      ",\"etco2\":" + nodeDataStorage["Respiration_EndTidalCarbonDioxide"] +
+      ",\"respRate\":" + nodeDataStorage["Respiratory_Respiration_Rate"] +
+      ",\"temp\":" + nodeDataStorage["Energy_Core_Temperature"] +
+      ",\"cust1\":0,\"cust2\":0,\"cust3\":0,"
+      "\"cvp\":10,\"cvpWaveform\":0,\"cvpVisible\":true,\"cvpAmplitude\": 2,\"cvpVariation\": 1,"
+      "\"icp\":10,\"icpWaveform\":0,\"icpVisible\":true,\"icpAmplitude\": 2,\"icpVariation\": 1,"
+      "\"icpLundbergAEnabled\": false,\"icpLundbergBEnabled\": false,"
+      "\"papSys\":20,\"papDia\":10,\"papWaveform\": 0,\"papVisible\":true,\"papVariation\": 2,"
+      "\"ecgWaveform\": 9,\"bpWaveform\": 0,\"spo2Waveform\": 0,\"etco2Waveform\":0,"
+      "\"ecgVisible\": true,\"bpVisible\":true,\"spo2Visible\": true,"
+      "\"etco2Visible\": true,\"rrVisible\": true,\"tempVisible\": true,"
+      "\"custVisible1\": false,\"custVisible2\":false,\"custVisible3\":false,"
+      "\"custLabel1\":\"\",\"custLabel2\":\"\",\"custLabel3\":\"\","
+      "\"custMeasureLabel1\":\"\",\"custMeasureLabel2\":\"\",\"custMeasureLabel3\": \"\","
+      "\"ectopicsPac\": 0,\"ectopicsPjc\": 0,\"ectopicsPvc\": 0,"
+      "\"perfusion\":0,"
+      "\"electricalInterference\":false,\"articInterference\":0,\"svvInterference\":0,\"sinusArrhythmiaInterference\": 1,"
+      "\"ventilated\":false,"
+      "\"electrodeStatus\": [true, true, true, true, true, true, true, true, true, true,true, true]"
+      "}";
+   LOG_DEBUG << "Writing message to iSimulate: {\"type\": \"ChangeActionPacket\" ...}";
+   ws_session->do_write(message);
+}
+
 void onNewWebsocketMessage(const std::string body) {
    // parse web socket message as json data
    //std::string type, data, context;
@@ -103,35 +145,11 @@ void onWebsocketHandshake(const std::string body) {
    LOG_DEBUG << "Writing message to iSimulate: " << message;
    ws_session->do_write(message);
 
-   message =  "{\"type\": \"NibpPacket\",\"subType\": 0,\"bpSys\": 120,\"bpDia\": 80}";
+   message =  "{\"type\": \"NibpPacket\",\"subType\": 0,\"bpSys\": 0,\"bpDia\": 0}";
    LOG_DEBUG << "Writing message to iSimulate: " << message;
    ws_session->do_write(message);
 
-   // parameter update
-   message =  "{\"type\": \"ChangeActionPacket\","
-      "\"trendTime\": 0,"
-      "\"hr\":80,\"bpSys\":120,\"bpDia\":80,\"spo2\":92,"
-      "\"etco2\":44,\"respRate\":15,\"temp\":38.1,"
-      "\"cust1\":0,\"cust2\":0,\"cust3\":0,"
-      "\"cvp\":10,\"cvpWaveform\":0,\"cvpVisible\":true,\"cvpAmplitude\": 2,\"cvpVariation\": 1,"
-      "\"icp\":10,\"icpWaveform\":0,\"icpVisible\":true,\"icpAmplitude\": 2,\"icpVariation\": 1,"
-      "\"icpLundbergAEnabled\": false,\"icpLundbergBEnabled\": false,"
-      "\"papSys\":20,\"papDia\":10,\"papWaveform\": 0,\"papVisible\":true,\"papVariation\": 2,"
-      "\"ecgWaveform\": 9,\"bpWaveform\": 0,\"spo2Waveform\": 0,\"etco2Waveform\":0,"
-      "\"ecgVisible\": true,\"bpVisible\":true,\"spo2Visible\": true,"
-      "\"etco2Visible\": true,\"rrVisible\":    true,\"tempVisible\":  true,"
-      "\"custVisible1\": false,\"custVisible2\":false,\"custVisible3\":false,"
-      "\"custLabel1\":\"\",\"custLabel2\":\"\",\"custLabel3\":\"\","
-      "\"custMeasureLabel1\":\"\",\"custMeasureLabel2\":\"\",\"custMeasureLabel3\": \"\","
-      "\"ectopicsPac\": 0,\"ectopicsPjc\": 0,\"ectopicsPvc\": 0,"
-      "\"perfusion\":0,"
-      "\"electricalInterference\":false,\"articInterference\":0,\"svvInterference\":0,\"sinusArrhythmiaInterference\": 1,"
-      "\"ventilated\":false,"
-      "\"electrodeStatus\": [true, true, true, true, true, true, true, true, true, true,true, true]"
-      "}";
-   LOG_DEBUG << "Writing message to iSimulate: " << message;
-   ws_session->do_write(message);
-
+   writeDataToMonitor();
 }
 
 void OnNewSimulationControl(AMM::SimulationControl& simControl, eprosima::fastrtps::SampleInfo_t* info) {
@@ -166,27 +184,28 @@ void OnNewSimulationControl(AMM::SimulationControl& simControl, eprosima::fastrt
 }
 
 void OnNewTick(AMM::Tick& tick, eprosima::fastrtps::SampleInfo_t* info) {
-   //LOG_DEBUG << "Tick received!";
-   if (arguments.tick) {
-      auto currentTime = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
-      auto source_time = int64_t(info->sourceTimestamp.seconds())*1000 + int64_t(info->sourceTimestamp.fraction())*1000/ULONG_MAX;
-      LOG_DEBUG << "Sim tick lag: " << currentTime - source_time << " ms";
-   }
+   //if ( arguments.verbose )
+   //   LOG_DEBUG << "Tick received!";
 }
 
 void OnPhysiologyValue(AMM::PhysiologyValue& physiologyvalue, eprosima::fastrtps::SampleInfo_t* info){
+   //const std::lock_guard<std::mutex> lock(nds_mutex);
+   // store all received phys values
+   if (!std::isnan(physiologyvalue.value())) {
+      nodeDataStorage[physiologyvalue.name()] = std::to_string(physiologyvalue.value());
+      //if ( arguments.verbose )
+      //   LOG_DEBUG << "[AMM_Node_Data] " << physiologyvalue.name() << " = " << physiologyvalue.value();
+      // phys values are updated every 200ms (5Hz)
+      // forward to iSimulate device only once per data update
+      // reduce frequency
+      if (physiologyvalue.name()=="SIM_TIME") writeDataToMonitor();
+   }
 
    static bool printRRdata = true;  // set flag to print only initial value received
    if (physiologyvalue.name()=="Respiratory_Respiration_Rate"){
       if ( arguments.verbose && printRRdata ) {
          LOG_DEBUG << "[AMM_Node_Data] Respiratory_Respiration_Rate" << "=" << physiologyvalue.value();
          printRRdata = false;
-      }
-      breathrate = physiologyvalue.value();
-      if (arguments.phys) {
-         auto currentTime = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
-         auto source_time = int64_t(info->sourceTimestamp.seconds())*1000 + int64_t(info->sourceTimestamp.fraction())*1000/ULONG_MAX;
-         LOG_DEBUG << "Phys value lag (Respiratory_Respiration_Rate): " << currentTime - source_time << " ms";
       }
    }
 }
@@ -366,6 +385,7 @@ int main(int argc, char *argv[]) {
 
    //TODO: turn discovery into asynch process see mycroft bridge
    // block until iSimulate monitor has been discovered on the local network
+
    while (true) {
       if ( monitor_port !=0 && monitor_service_new) {
          LOG_INFO << "Monitor port aquired: " << monitor_port;

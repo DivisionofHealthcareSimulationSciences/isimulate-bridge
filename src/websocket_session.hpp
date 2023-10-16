@@ -45,6 +45,7 @@ class websocket_session : public std::enable_shared_from_this<websocket_session>
    void processMessage(const std::string body);
    void on_read(error_code ec, std::size_t bytes_transferred);
    void on_close(error_code ec);
+   mutable std::mutex qmutex;
 
 public:
    explicit websocket_session(net::io_context& ioc);

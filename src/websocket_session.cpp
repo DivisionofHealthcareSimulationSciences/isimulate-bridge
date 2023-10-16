@@ -119,7 +119,10 @@ void websocket_session::on_handshake(error_code ec)
 
 void websocket_session::do_write(std::string message) {
    if (!write_scheduled){
-      LOG_DEBUG << "websocket writing message:" << message;
+
+      std::lock_guard<std::mutex> lock(qmutex);
+      
+      //LOG_DEBUG << "websocket writing message:" << message;
       // Send the message
       ws_.async_write(
          net::buffer(message),
@@ -128,8 +131,9 @@ void websocket_session::do_write(std::string message) {
                shared_from_this()));
       write_scheduled = true;
    } else {
-      LOG_DEBUG << "websocket queuing message:" << message;
+      //LOG_DEBUG << "websocket queuing message:" << message;
       message_queue.push(message);
+      LOG_DEBUG << "websocket queuing message. Queue size: " << message_queue.size();
    }
 }
 
@@ -137,14 +141,17 @@ void websocket_session::on_write(
       error_code ec,
       std::size_t bytes_transferred) {
 
+   std::lock_guard<std::mutex> lock(qmutex);
+
    boost::ignore_unused(bytes_transferred);
    if(ec) return fail(ec, "write");
-   LOG_DEBUG << "websocket message written: " << bytes_transferred;
+   LOG_DEBUG << "websocket message written: " << bytes_transferred << "bytes. queue size: " << message_queue.size();
    write_scheduled = false;
 
    if (!message_queue.empty()){
       std::string message = message_queue.front();
-      LOG_DEBUG << "websocket writing message from queue:" << message;
+      message_queue.pop();
+      LOG_DEBUG << "websocket writing message from queue";
       // Send the message
       ws_.async_write(
          net::buffer(message),
@@ -152,7 +159,6 @@ void websocket_session::on_write(
                &websocket_session::on_write,
                shared_from_this()));
       write_scheduled = true;
-      message_queue.pop();
    }
 }
 
