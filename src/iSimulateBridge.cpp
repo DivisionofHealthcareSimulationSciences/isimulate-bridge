@@ -6,6 +6,7 @@
 #include <vector>
 #include <iostream>
 #include <cmath>
+#include <sstream>
 
 #include <amm_std.h>
 #include <signal.h>
@@ -45,13 +46,14 @@ std::map<std::string, std::string> nodeDataStorage = {
       {"BloodChemistry_Oxygen_Saturation", "0"},
       {"Respiration_EndTidalCarbonDioxide", "0"},
       {"Respiratory_Respiration_Rate", "0"},
-      {"Energy_Core_Temperature", "0"}
+      {"Energy_Core_Temperature", "0"},
+      {"SIM_TIME", "0"}
    };
 
 // initialize module state
 float breathrate = 0;
 float inflow;
-bool isSimRunning = false;
+bool isSimRunning = false;       // TODO: remove
 
 // websocket session for asynchronous read/write to iSimulate device
 net::io_context ioc;
@@ -70,7 +72,7 @@ struct arguments {
 } arguments;
 
 // callback function for new data on websocket
-void writeDataToMonitor() {
+void writeChangeActionPacket() {
    std::string message =  "{\"type\": \"ChangeActionPacket\","
       "\"trendTime\": 0"
       ",\"hr\":" + nodeDataStorage["Cardiovascular_HeartRate"] +
@@ -101,6 +103,15 @@ void writeDataToMonitor() {
    ws_session->do_write(message);
 }
 
+void writeSyncTimesPacket() {
+   std::string message =  "{\"type\": \"SyncTimesPacket\""
+      ",\"actualTime\":0"
+      ",\"virtualTime\":" + nodeDataStorage["SIM_TIME"] +
+      ",\"alarmTime\":0,\"isVirtualTimePaused\":false}";
+   LOG_DEBUG << "Writing message to iSimulate: " << message; //{\"type\": \"SyncTimesPacket\" ...}";
+   ws_session->do_write(message);
+}
+
 void onNewWebsocketMessage(const std::string body) {
    // parse web socket message as json data
    //std::string type, data, context;
@@ -114,8 +125,39 @@ void onNewWebsocketMessage(const std::string body) {
 void onWebsocketHandshake(const std::string body) {
    std::string message;
 
+   message = "{\"type\": \"ScenarioCurrentStatePacket\""
+      ",\"scenarioData\": {\"scenarioId\": \"\""
+                           ",\"scenarioType\": \"Vital Signs\""
+                           ",\"scenarioName\": \"\""
+                           ",\"scenarioTime\": 600"
+                           ",\"scenarioMonitorType\": 3"
+                           ",\"scenarioStory\": {\"history\": \"\""
+                                                ",\"course\": \"\""
+                                                ",\"discussion\": \"\"}"
+                           ",\"patientInformation\": {\"patientName\": \"\""
+                                                      ",\"patientSex\":0"
+                                                      ",\"patientCondition\": \"\""
+                                                      ",\"patientAdmitted\": 0"
+                                                      ",\"patientAge\": 30"
+                                                      ",\"patientPhotoId\":0}}"
+      ",\"scenarioState\": 0"
+      ",\"studentInfo\": {\"studentName\": \"\""
+                        ",\"studentNumber\": \"\""
+                        ",\"studentEmail\": \"\"}}";
+   LOG_DEBUG << "Writing message to iSimulate: " << message;
+   ws_session->do_write(message);
+
    // monitorState 3 = LifePak 15
-   message =  "{\"type\": \"ChangeMonitorPacket\",\"monitorState\": 3}";
+   // message =  "{\"type\": \"ChangeMonitorPacket\",\"monitorState\": 3}";
+   // LOG_DEBUG << "Writing message to iSimulate: " << message;
+   // ws_session->do_write(message);
+
+   message =  "{\"type\":\"SyncTimesPacket\",\"actualTime\":0,\"virtualTime\":0,\"alarmTime\":0,\"isVirtualTimePaused\":false}}";
+   LOG_DEBUG << "Writing message to iSimulate: " << message;
+   ws_session->do_write(message);
+
+   // requestedState 1 = running
+   message =  "{\"type\": \"ScenarioChangeStatePacket\",\"requestedState\": 1}";
    LOG_DEBUG << "Writing message to iSimulate: " << message;
    ws_session->do_write(message);
 
@@ -140,46 +182,55 @@ void onWebsocketHandshake(const std::string body) {
    LOG_DEBUG << "Writing message to iSimulate: " << message;
    ws_session->do_write(message);
 
-   // requestedState 1 = running
-   message =  "{\"type\": \"ScenarioChangeStatePacket\",\"requestedState\": 1}";
-   LOG_DEBUG << "Writing message to iSimulate: " << message;
-   ws_session->do_write(message);
-
    message =  "{\"type\": \"NibpPacket\",\"subType\": 0,\"bpSys\": 0,\"bpDia\": 0}";
    LOG_DEBUG << "Writing message to iSimulate: " << message;
    ws_session->do_write(message);
 
-   writeDataToMonitor();
+   writeChangeActionPacket();
 }
 
 void OnNewSimulationControl(AMM::SimulationControl& simControl, eprosima::fastrtps::SampleInfo_t* info) {
+   std::string message;
 
    switch (simControl.type()) {
+      case AMM::ControlType::RUN :
 
-   case AMM::ControlType::RUN :
+         // requestedState 1 = running
+         message =  "{\"type\": \"ScenarioChangeStatePacket\",\"requestedState\": 1}";
+         LOG_DEBUG << "Writing message to iSimulate: " << message;
+         ws_session->do_write(message);
 
-      LOG_INFO << "SimControl Message recieved; Run sim.";
-      isSimRunning = true;
-      break;
+         // write last recorded SIM_TIME to monitor
+         writeSyncTimesPacket();
 
-   case AMM::ControlType::HALT :
+         LOG_INFO << "SimControl Message recieved; Run sim.";
+         isSimRunning = true;
+         break;
 
-      LOG_INFO << "SimControl Message recieved; Halt sim.";
-      isSimRunning = false;
-      break;
+      case AMM::ControlType::HALT :
 
-   case AMM::ControlType::RESET :
+         // requestedState 2 = stopped
+         message =  "{\"type\": \"ScenarioChangeStatePacket\",\"requestedState\": 2}";
+         LOG_DEBUG << "Writing message to iSimulate: " << message;
+         ws_session->do_write(message);
 
-      LOG_INFO << "SimControl Message recieved; Reset sim.";
+         LOG_INFO << "SimControl Message recieved; Halt sim.";
+         isSimRunning = false;
+         break;
 
-      isSimRunning = false;
-      break;
+      case AMM::ControlType::RESET :
 
-   case AMM::ControlType::SAVE :
+         onWebsocketHandshake(message);
 
-      LOG_INFO << "SimControl Message recieved; Save sim.";
-      //mgr->WriteModuleConfiguration(currentState.mc);
-      break;
+         LOG_INFO << "SimControl Message recieved; Reset sim.";
+         isSimRunning = false;
+         break;
+
+      case AMM::ControlType::SAVE :
+         // no action
+         //LOG_INFO << "SimControl Message recieved; Save sim.";
+         //mgr->WriteModuleConfiguration(currentState.mc);
+         break;
    }
 }
 
@@ -198,7 +249,16 @@ void OnPhysiologyValue(AMM::PhysiologyValue& physiologyvalue, eprosima::fastrtps
       // phys values are updated every 200ms (5Hz)
       // forward to iSimulate device only once per data update
       // reduce frequency
-      if (physiologyvalue.name()=="SIM_TIME") writeDataToMonitor();
+      if (physiologyvalue.name()=="SIM_TIME") {
+         // reformat SIM_TIME for storage
+         std::ostringstream oss;
+         oss.precision(1);
+         oss << std::fixed << physiologyvalue.value();
+         nodeDataStorage["SIM_TIME"] = oss.str();
+         //LOG_DEBUG << "sim time stringstream: " << oss.str();
+
+         writeChangeActionPacket();
+      }
    }
 
    static bool printRRdata = true;  // set flag to print only initial value received
