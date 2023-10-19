@@ -12,8 +12,6 @@
 #include <signal.h>
 #include "amm/BaseLogger.h"
 
-#include <argp.h>
-
 /// json library
 #include "rapidjson/document.h"
 #include "rapidjson/writer.h"
@@ -22,14 +20,12 @@
 
 extern "C" {
    #include "service_discovery.h"
+   #include "cl_arguments.c"
 }
 
 using namespace AMM;
 using namespace std::chrono;
 using namespace rapidjson;
-
-// debug settings
-bool debug_HF_data = false;
 
 // declare DDSManager for this module
 const std::string moduleName = "iSimulate Bridge";
@@ -62,14 +58,6 @@ auto ws_session = std::make_shared<websocket_session>(ioc);
 std::string host = "";
 std::string port = "";
 const std::string target = "/";
-
-struct arguments {
-   bool render;
-   bool phys;
-   bool wave;
-   bool tick;
-   bool verbose;
-} arguments;
 
 // callback function for new data on websocket
 void writeChangeActionPacket() {
@@ -130,7 +118,7 @@ void onWebsocketHandshake(const std::string body) {
                            ",\"scenarioType\": \"Vital Signs\""
                            ",\"scenarioName\": \"\""
                            ",\"scenarioTime\": 600"
-                           ",\"scenarioMonitorType\": 3"
+                           ",\"scenarioMonitorType\": " + std::to_string(arguments.monitor) +
                            ",\"scenarioStory\": {\"history\": \"\""
                                                 ",\"course\": \"\""
                                                 ",\"discussion\": \"\"}"
@@ -201,6 +189,7 @@ void OnNewSimulationControl(AMM::SimulationControl& simControl, eprosima::fastrt
          ws_session->do_write(message);
 
          // write last recorded SIM_TIME to monitor
+         // TODO: iSimulate may need to fix. does not work as expected
          writeSyncTimesPacket();
 
          LOG_INFO << "SimControl Message recieved; Run sim.";
@@ -256,7 +245,7 @@ void OnPhysiologyValue(AMM::PhysiologyValue& physiologyvalue, eprosima::fastrtps
          oss << std::fixed << physiologyvalue.value();
          nodeDataStorage["SIM_TIME"] = oss.str();
          //LOG_DEBUG << "sim time stringstream: " << oss.str();
-
+         // TODO: check for live websocket connection to monitor
          writeChangeActionPacket();
       }
    }
@@ -271,44 +260,18 @@ void OnPhysiologyValue(AMM::PhysiologyValue& physiologyvalue, eprosima::fastrtps
 }
 
 void OnPhysiologyWaveform(AMM::PhysiologyWaveform &waveform, SampleInfo_t *info) {
+   // testing mohses data connection
    static int printHFdata = 10;   // initialize counter to print first xx high freequency data points
    if ( arguments.verbose && printHFdata > 0) {
       LOG_DEBUG << "[AMM_Node_Data](HF) " << waveform.name() << "=" << waveform.value();
       printHFdata -= 1;
    }
-
-   if (waveform.name()=="Respiratory_Inspiratory_Flow"){
-      inflow=waveform.value();
-      if (arguments.wave) {
-         auto currentTime = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
-         auto source_time = int64_t(info->sourceTimestamp.seconds())*1000 + int64_t(info->sourceTimestamp.fraction())*1000/ULONG_MAX;
-         LOG_DEBUG << "Physiology waveform lag (Respiratory_Inspiratory_Flow): " << currentTime - source_time << " ms";
-      }
-   }
-   if (debug_HF_data) {
-      LOG_DEBUG << "[AMM_Node_Data](HF)" << waveform.name() << "=" << waveform.value();
-   }
 }
 
 void OnNewRenderModification(AMM::RenderModification &rendMod, SampleInfo_t *info) {
-   auto currentTime = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
-   auto source_time = int64_t(info->sourceTimestamp.seconds())*1000 + int64_t(info->sourceTimestamp.fraction())*1000/ULONG_MAX;
-
-   if (rendMod.data().to_string().find("START_OF_INHALE") != std::string::npos) {
-      //LOG_DEBUG << "Render Modification received: START_OF_INHALE";
-      if (arguments.render) {
-         LOG_DEBUG << "Render mod lag (START_OF_INHALE): " << currentTime - source_time << " ms";
-      }
-   } else if (rendMod.data().to_string().find("START_OF_EXHALE") != std::string::npos) {
-      //LOG_DEBUG << "Render Modification received: START_OF_EXHALE";
-      if ( arguments.render ) {
-         LOG_DEBUG << "Render mod lag (START_OF_EXHALE): " << currentTime - source_time << " ms";
-      }
-   } else {
-      //LOG_DEBUG << "Render Modification received:\n"
-      //          << "Type:      " << rendMod.type() << "\n"
-      //          << "Data:      " << rendMod.data();
-   }
+   //LOG_DEBUG << "Render Modification received:\n"
+   //          << "Type:      " << rendMod.type() << "\n"
+   //          << "Data:      " << rendMod.data();
 }
 
 void PublishOperationalDescription() {
@@ -346,62 +309,18 @@ void checkForExit() {
    std::raise(SIGTERM);
 }
 
-// set up command line option checking using argp.h
-const char *argp_program_version = "mohses_isimulate_bridge v1.2.0";
-const char *argp_program_bug_address = "<rainer@uw.edu>";
-static char doc[] = "Bridge module for data exchange between MoHSES and iSimulate device.";
-static char args_doc[] = "";
-static struct argp_option options[] = {
-    { "render", 'r', 0, 0, "Show render mod latency"},
-    { "phys", 'p', 0, 0, "Show physiology value latency"},
-    { "wave", 'w', 0, 0, "Show physiology waveform latency"},
-    { "tick", 't', 0, 0, "Show sim tick latency"},
-    { "verbose", 'v', 0, 0, "Print extra data"},
-    { 0 }
-};
-
-static error_t parse_opt(int key, char *arg, struct argp_state *state) {
-   struct arguments *arguments = (struct arguments*)(state->input);
-   int vol;
-   switch (key) {
-      case 'r':
-         arguments->render = true;
-         break;
-      case 'p':
-         arguments->phys = true;
-         break;
-      case 'w':
-         arguments->wave = true;
-         break;
-      case 't':
-         arguments->tick = true;
-         break;
-      case 'v':
-         arguments->verbose = true;
-         break;
-      case ARGP_KEY_ARG: return 0;
-      default: return ARGP_ERR_UNKNOWN;
-   }
-   return 0;
-}
-
-static struct argp argp = { options, parse_opt, args_doc, doc, 0, 0, 0 };
-
 int main(int argc, char *argv[]) {
+
+   // set default command line options. process.
+   arguments.monitor = 3;
+   arguments.verbose = false;
+   argp_parse(&argp, argc, argv, 0, 0, &arguments);
 
    static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
    plog::init(plog::verbose, &consoleAppender);
 
-   // process command line options
-   arguments.render = false;
-   arguments.phys = false;
-   arguments.wave = false;
-   arguments.tick = false;
-   arguments.verbose = false;
-
-   argp_parse(&argp, argc, argv, 0, 0, &arguments);
-
    LOG_INFO << "=== [ iSimulate Bridge ] ===";
+   LOG_INFO << "Monitor model ID = " << arguments.monitor;
 
    mgr->InitializeOperationalDescription();
    mgr->CreateOperationalDescriptionPublisher();
