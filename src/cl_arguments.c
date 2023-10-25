@@ -9,6 +9,7 @@ struct arguments {
 // set up command line option checking using argp.h
 const char *argp_program_version = "mohses_isimulate_bridge v1.2.0";
 const char *argp_program_bug_address = "<rainer@uw.edu>";
+
 static char doc[] = 
     "Bridge module for data exchange between MoHSES and iSimulate device.\
     \vMonitor IDs\n\
@@ -28,8 +29,8 @@ static char doc[] =
 
 static char args_doc[] = "";
 static struct argp_option options[] = {
-    { "monitor", 'm', "MONITOR", 0, "Select monitor model by ID"},
-    { "verbose", 'v', 0, 0, "Print extra data"},
+    { "monitor",  'm', "MONITOR", 0, "Select monitor model by ID"},
+    { "verbose",  'v', 0, 0, "Print extra data"},
     { 0 }
 };
 

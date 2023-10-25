@@ -34,11 +34,15 @@ void websocket_session::run(
 
 void websocket_session::fail(error_code ec, char const* what)
 {
-   // Don't report these
-   if( ec == net::error::operation_aborted ||
-      ec == websocket::error::closed)
+   // Do report these
+   if( ec == net::error::operation_aborted ) {
+      LOG_ERROR << what << " operation aborted: " << ec.message();
       return;
-
+   }
+   if( ec == websocket::error::closed) {
+      LOG_ERROR << what << " websocket closed: " << ec.message();
+      return;
+   }
    LOG_ERROR << what << ": " << ec.message();
 }
 
@@ -178,7 +182,13 @@ void websocket_session::on_read(
 {
    boost::ignore_unused(bytes_transferred);
 
-   if(ec) return fail(ec, "read");
+   // errors?
+   if( ec == net::error::eof ) {
+      LOG_ERROR << "read: end-of-file " << ec.message();
+      return;
+   } else if (ec) return fail(ec, "read");
+
+   //LOG_INFO << "read: " << ec.message();
 
    //LOG_INFO << "websocket message: " << beast::make_printable(buffer_.data());
    if (readCallback) readCallback(beast::buffers_to_string(buffer_.data()));
@@ -203,6 +213,7 @@ void websocket_session::do_close()
       beast::bind_front_handler(
          &websocket_session::on_close,
          shared_from_this()));
+
 }
 
 void websocket_session::on_close(error_code ec)

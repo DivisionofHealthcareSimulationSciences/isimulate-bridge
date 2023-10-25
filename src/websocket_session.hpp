@@ -42,7 +42,6 @@ class websocket_session : public std::enable_shared_from_this<websocket_session>
    void on_connect(error_code ec, tcp::resolver::results_type::endpoint_type ep);
    void on_handshake(error_code ec);
    void on_write(error_code ec, std::size_t bytes_transferred);
-   void processMessage(const std::string body);
    void on_read(error_code ec, std::size_t bytes_transferred);
    void on_close(error_code ec);
    mutable std::mutex qmutex;

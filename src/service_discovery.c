@@ -69,7 +69,8 @@ static void resolve_callback(
             avahi_free(t);
         }
     }
-    avahi_service_resolver_free(r);
+    // Do not destroy resolver. Resolver will be refired if txt record updates
+    //avahi_service_resolver_free(r);
 }
 
 static void browse_callback(
