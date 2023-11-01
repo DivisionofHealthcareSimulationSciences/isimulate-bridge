@@ -36,6 +36,7 @@ class websocket_session : public std::enable_shared_from_this<websocket_session>
    std::function<void(std::string)> handshakeCallback;
    std::queue<std::string> message_queue;
    bool write_scheduled = false;
+   bool verbose_ = false;
 
    void fail(error_code ec, char const* what);
    void on_resolve(error_code ec, tcp::resolver::results_type results);
@@ -55,4 +56,5 @@ public:
    void registerHandshakeCallback(std::function<void(std::string)> cb);
    void do_write(std::string message);
    void do_close();
+   void set_verbose(bool flag);
 };

@@ -59,7 +59,46 @@ std::string host = "";
 std::string port = "";
 const std::string target = "/";
 
-// callback function for new data on websocket
+//write data packets to websocket
+void writeSettingsPacket() {
+   std::string message =  "{\"type\": \"SettingsPacket\""
+      ",\"tempMeasureF\":true"
+      ",\"etco2MeasurekPa\":false"
+      ",\"cprDepthMeasureInch\":false"
+      ",\"pacingThreshold\":50"
+      ",\"preserveCO2\":true"
+      ",\"seeThruCPR\":true"
+      ",\"pacerCapture\":true"
+      ",\"monitorControlsVolume\":true"
+      ",\"nibpMeasure\":0,\"weightMeasure\":0,\"ibpMeasure\":0}";
+   LOG_DEBUG << "Writing message to iSimulate: " << message;
+   ws_session->do_write(message);
+}
+
+void writeScenarioPacket() {
+   std::string message = "{\"type\": \"ScenarioCurrentStatePacket\""
+      ",\"scenarioData\": {\"scenarioId\": \"\""
+                           ",\"scenarioType\": \"Vital Signs\""
+                           ",\"scenarioName\": \"\""
+                           ",\"scenarioTime\": 600"
+                           ",\"scenarioMonitorType\": " + std::to_string(arguments.monitor) +
+                           ",\"scenarioStory\": {\"history\": \"\""
+                                                ",\"course\": \"\""
+                                                ",\"discussion\": \"\"}"
+                           ",\"patientInformation\": {\"patientName\": \"\""
+                                                      ",\"patientSex\":0"
+                                                      ",\"patientCondition\": \"\""
+                                                      ",\"patientAdmitted\": 0"
+                                                      ",\"patientAge\": 30"
+                                                      ",\"patientPhotoId\":0}}"
+      ",\"scenarioState\": 0"
+      ",\"studentInfo\": {\"studentName\": \"\""
+                        ",\"studentNumber\": \"\""
+                        ",\"studentEmail\": \"\"}}";
+   LOG_DEBUG << "Writing message to iSimulate: " << message;
+   ws_session->do_write(message);
+}
+
 void writeChangeActionPacket() {
    std::string message =  "{\"type\": \"ChangeActionPacket\","
       "\"trendTime\": 0"
@@ -87,7 +126,10 @@ void writeChangeActionPacket() {
       "\"ventilated\":false,"
       "\"electrodeStatus\": [true, true, true, true, true, true, true, true, true, true,true, true]"
       "}";
-   LOG_DEBUG << "Writing message to iSimulate: {\"type\": \"ChangeActionPacket\" ...}";
+   if ( arguments.verbose )
+      LOG_DEBUG << "Writing message to iSimulate: " << message;
+   else 
+      LOG_DEBUG << "Writing message to iSimulate: {\"type\": \"ChangeActionPacket\" ...}";
    ws_session->do_write(message);
 }
 
@@ -100,60 +142,21 @@ void writeSyncTimesPacket() {
    ws_session->do_write(message);
 }
 
-void onNewWebsocketMessage(const std::string body) {
-   // parse web socket message as json data
-   //std::string type, data, context;
-   //Document document;
-   //document.Parse(body.c_str());
-
-   LOG_DEBUG << "iSimulate message: " << body ;
+void writeScenarioChangeStatePacket(int state) {
+   // requestedState values: 0 - initial, 1 - running, 2 - paused, 3 - finished
+   std::string message =  "{\"type\":\"ScenarioChangeStatePacket\",\"requestedState\":" + std::to_string(state) + "}";
+   LOG_DEBUG << "Writing message to iSimulate: " << message;
+   ws_session->do_write(message);
 }
 
-// init iSimulate device
-void onWebsocketHandshake(const std::string body) {
-   std::string message;
-
-   message = "{\"type\": \"ScenarioCurrentStatePacket\""
-      ",\"scenarioData\": {\"scenarioId\": \"\""
-                           ",\"scenarioType\": \"Vital Signs\""
-                           ",\"scenarioName\": \"\""
-                           ",\"scenarioTime\": 600"
-                           ",\"scenarioMonitorType\": " + std::to_string(arguments.monitor) +
-                           ",\"scenarioStory\": {\"history\": \"\""
-                                                ",\"course\": \"\""
-                                                ",\"discussion\": \"\"}"
-                           ",\"patientInformation\": {\"patientName\": \"\""
-                                                      ",\"patientSex\":0"
-                                                      ",\"patientCondition\": \"\""
-                                                      ",\"patientAdmitted\": 0"
-                                                      ",\"patientAge\": 30"
-                                                      ",\"patientPhotoId\":0}}"
-      ",\"scenarioState\": 0"
-      ",\"studentInfo\": {\"studentName\": \"\""
-                        ",\"studentNumber\": \"\""
-                        ",\"studentEmail\": \"\"}}";
+void writePowerOnPacket() {
+   std::string message =  "{\"type\":\"PowerOnPacket\"}";
    LOG_DEBUG << "Writing message to iSimulate: " << message;
    ws_session->do_write(message);
+}
 
-   // monitorState 3 = LifePak 15
-   // message =  "{\"type\": \"ChangeMonitorPacket\",\"monitorState\": 3}";
-   // LOG_DEBUG << "Writing message to iSimulate: " << message;
-   // ws_session->do_write(message);
-
-   message =  "{\"type\":\"SyncTimesPacket\",\"actualTime\":0,\"virtualTime\":0,\"alarmTime\":0,\"isVirtualTimePaused\":false}}";
-   LOG_DEBUG << "Writing message to iSimulate: " << message;
-   ws_session->do_write(message);
-
-   // requestedState 1 = running
-   message =  "{\"type\": \"ScenarioChangeStatePacket\",\"requestedState\": 1}";
-   LOG_DEBUG << "Writing message to iSimulate: " << message;
-   ws_session->do_write(message);
-
-   message =  "{\"type\": \"PowerOnPacket\"}";
-   LOG_DEBUG << "Writing message to iSimulate: " << message;
-   ws_session->do_write(message);
-
-   message =  "{\"type\": \"VisibilityPacket\","
+void writeVisibilityPacket() {
+   std::string message =  "{\"type\": \"VisibilityPacket\","
       "\"ecgVisible\": true,"
       "\"bpVisible\": true,"
       "\"spo2Visible\":true,"
@@ -169,12 +172,53 @@ void onWebsocketHandshake(const std::string body) {
       "}";
    LOG_DEBUG << "Writing message to iSimulate: " << message;
    ws_session->do_write(message);
+}
 
-   message =  "{\"type\": \"NibpPacket\",\"subType\": 0,\"bpSys\": 0,\"bpDia\": 0}";
+void writeNibpPacket() {
+   std::string message =  "{\"type\": \"NibpPacket\",\"subType\": 0,\"bpSys\": 0,\"bpDia\": 0}";
    LOG_DEBUG << "Writing message to iSimulate: " << message;
    ws_session->do_write(message);
+}
 
-   writeChangeActionPacket();
+void writeChangeMonitorPacket() {
+   std::string message =  "{\"type\": \"ChangeMonitorPacket\""
+      ",\"monitorState\":" + std::to_string(arguments.monitor) + "}";
+   LOG_DEBUG << "Writing message to iSimulate: " << message;
+   ws_session->do_write(message);
+}
+
+// callback function for new data on websocket
+void onNewWebsocketMessage(const std::string body) {
+   // parse web socket message as json data
+   std::string type;
+   Document document;
+   document.Parse(body.c_str());
+   LOG_DEBUG << "iSimulate message: " << body ;
+
+   if (document.HasMember("type") && document["type"].IsString()) {
+      type = document["type"].GetString();
+      if (type.compare("SettingsRequestPacket") == 0) {
+         writeSettingsPacket();
+      } else if (type.compare("ScenarioRequestPacket") == 0) {
+         // respond to request
+         writeScenarioPacket();
+         // then fire up monitor
+         writeSyncTimesPacket();
+         writeScenarioChangeStatePacket(1);
+         writePowerOnPacket();
+         writeVisibilityPacket();
+         writeNibpPacket();
+         writeChangeActionPacket();
+      }
+   }
+}
+
+// init iSimulate device
+void onWebsocketHandshake(const std::string body) {
+   std::string message = "{\"type\":\"ConnectionTypePacket\",\"connectionType\":1}";
+   // iSimulate monitor should respond with settings request and scenario request
+   LOG_DEBUG << "Writing message to iSimulate: " << message;
+   ws_session->do_write(message);
 }
 
 void OnNewSimulationControl(AMM::SimulationControl& simControl, eprosima::fastrtps::SampleInfo_t* info) {
@@ -184,9 +228,7 @@ void OnNewSimulationControl(AMM::SimulationControl& simControl, eprosima::fastrt
       case AMM::ControlType::RUN :
 
          // requestedState 1 = running
-         message =  "{\"type\": \"ScenarioChangeStatePacket\",\"requestedState\": 1}";
-         LOG_DEBUG << "Writing message to iSimulate: " << message;
-         ws_session->do_write(message);
+         writeScenarioChangeStatePacket(1);
 
          // write last recorded SIM_TIME to monitor
          // TODO: iSimulate may need to fix. does not work as expected
@@ -199,9 +241,7 @@ void OnNewSimulationControl(AMM::SimulationControl& simControl, eprosima::fastrt
       case AMM::ControlType::HALT :
 
          // requestedState 2 = stopped
-         message =  "{\"type\": \"ScenarioChangeStatePacket\",\"requestedState\": 2}";
-         LOG_DEBUG << "Writing message to iSimulate: " << message;
-         ws_session->do_write(message);
+         writeScenarioChangeStatePacket(2);
 
          LOG_INFO << "SimControl Message recieved; Halt sim.";
          isSimRunning = false;
@@ -391,6 +431,7 @@ int main(int argc, char *argv[]) {
 
       // set up websocket session
       ws_session->run(host, port, target);
+      ws_session->set_verbose( arguments.verbose );
       ws_session->registerHandshakeCallback(onWebsocketHandshake);
       ws_session->registerReadCallback(onNewWebsocketMessage);
 

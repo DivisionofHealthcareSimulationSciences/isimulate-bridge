@@ -137,7 +137,8 @@ void websocket_session::do_write(std::string message) {
    } else {
       //LOG_DEBUG << "websocket queuing message:" << message;
       message_queue.push(message);
-      LOG_DEBUG << "websocket queuing message. Queue size: " << message_queue.size();
+      if ( verbose_ )
+         LOG_DEBUG << "websocket queuing message. Queue size: " << message_queue.size();
    }
 }
 
@@ -149,13 +150,15 @@ void websocket_session::on_write(
 
    boost::ignore_unused(bytes_transferred);
    if(ec) return fail(ec, "write");
-   LOG_DEBUG << "websocket message written: " << bytes_transferred << "bytes. queue size: " << message_queue.size();
+   if ( verbose_ )
+      LOG_DEBUG << "websocket message written: " << bytes_transferred << "bytes. queue size: " << message_queue.size();
    write_scheduled = false;
 
    if (!message_queue.empty()){
       std::string message = message_queue.front();
       message_queue.pop();
-      LOG_DEBUG << "websocket writing message from queue";
+      if ( verbose_ )
+         LOG_DEBUG << "websocket writing message from queue";
       // Send the message
       ws_.async_write(
          net::buffer(message),
@@ -222,4 +225,8 @@ void websocket_session::on_close(error_code ec)
 
    // If we get here then the connection is closed gracefully
    LOG_INFO << "websocket closed gracefully";
+}
+
+void websocket_session::set_verbose(bool flag) {
+   verbose_ = flag;
 }
