@@ -46,9 +46,8 @@ std::map<std::string, std::string> nodeDataStorage = {
    };
 
 // initialize module state
-float breathrate = 0;
-float inflow;
-bool isSimRunning = false;       // TODO: remove
+int sim_status = 0;  // 0 - initial/reset, 1 - running, 2 - paused
+int64_t lastTick = 0;
 
 // websocket session for asynchronous read/write to iSimulate device
 net::io_context ioc;
@@ -60,6 +59,13 @@ std::string port = "";
 const std::string target = "/";
 
 //write data packets to websocket
+void writeConnectionTypePacket(int con) {
+   std::string message = "{\"type\":\"ConnectionTypePacket\",\"connectionType\":" + std::to_string(con) + "}";
+   // iSimulate monitor should respond with settings request and scenario request
+   LOG_DEBUG << "Writing message to iSimulate: " << message;
+   ws_session->do_write(message);
+}
+
 void writeSettingsPacket() {
    std::string message =  "{\"type\": \"SettingsPacket\""
       ",\"tempMeasureF\":true"
@@ -128,8 +134,8 @@ void writeChangeActionPacket() {
       "}";
    if ( arguments.verbose )
       LOG_DEBUG << "Writing message to iSimulate: " << message;
-   else 
-      LOG_DEBUG << "Writing message to iSimulate: {\"type\": \"ChangeActionPacket\" ...}";
+   // else 
+   //   LOG_DEBUG << "Writing message to iSimulate: {\"type\": \"ChangeActionPacket\" ...}";
    ws_session->do_write(message);
 }
 
@@ -187,6 +193,12 @@ void writeChangeMonitorPacket() {
    ws_session->do_write(message);
 }
 
+void writeDisconnectPackage() {
+   std::string message =  "{\"type\":\"DisconnectPacket\"}";
+   LOG_DEBUG << "Writing message to iSimulate: " << message;
+   ws_session->do_write(message);
+}
+
 // callback function for new data on websocket
 void onNewWebsocketMessage(const std::string body) {
    // parse web socket message as json data
@@ -204,21 +216,19 @@ void onNewWebsocketMessage(const std::string body) {
          writeScenarioPacket();
          // then fire up monitor
          writeSyncTimesPacket();
-         writeScenarioChangeStatePacket(1);
          writePowerOnPacket();
+         writeScenarioChangeStatePacket(sim_status);
          writeVisibilityPacket();
-         writeNibpPacket();
-         writeChangeActionPacket();
+         //writeNibpPacket();
+         //writeChangeActionPacket();
       }
    }
 }
 
 // init iSimulate device
 void onWebsocketHandshake(const std::string body) {
-   std::string message = "{\"type\":\"ConnectionTypePacket\",\"connectionType\":1}";
+   writeConnectionTypePacket(1);
    // iSimulate monitor should respond with settings request and scenario request
-   LOG_DEBUG << "Writing message to iSimulate: " << message;
-   ws_session->do_write(message);
 }
 
 void OnNewSimulationControl(AMM::SimulationControl& simControl, eprosima::fastrtps::SampleInfo_t* info) {
@@ -227,32 +237,37 @@ void OnNewSimulationControl(AMM::SimulationControl& simControl, eprosima::fastrt
    switch (simControl.type()) {
       case AMM::ControlType::RUN :
 
-         // requestedState 1 = running
-         writeScenarioChangeStatePacket(1);
-
          // write last recorded SIM_TIME to monitor
          // TODO: iSimulate may need to fix. does not work as expected
          writeSyncTimesPacket();
 
+         sim_status = 1;
+         // requestedState 1 = running
+         writeScenarioChangeStatePacket(sim_status);
+
          LOG_INFO << "SimControl Message recieved; Run sim.";
-         isSimRunning = true;
          break;
 
       case AMM::ControlType::HALT :
 
+         sim_status = 2;
          // requestedState 2 = stopped
-         writeScenarioChangeStatePacket(2);
+         writeScenarioChangeStatePacket(sim_status);
 
          LOG_INFO << "SimControl Message recieved; Halt sim.";
-         isSimRunning = false;
          break;
 
       case AMM::ControlType::RESET :
 
-         onWebsocketHandshake(message);
+         //TODO: clear data and send to monitor before stopping
+         nodeDataStorage.clear();
+
+         sim_status = 0;
+         writeScenarioChangeStatePacket(2); // set monitor to pause state
+         writeConnectionTypePacket(1);
 
          LOG_INFO << "SimControl Message recieved; Reset sim.";
-         isSimRunning = false;
+
          break;
 
       case AMM::ControlType::SAVE :
@@ -266,6 +281,10 @@ void OnNewSimulationControl(AMM::SimulationControl& simControl, eprosima::fastrt
 void OnNewTick(AMM::Tick& tick, eprosima::fastrtps::SampleInfo_t* info) {
    //if ( arguments.verbose )
    //   LOG_DEBUG << "Tick received!";
+   if ( sim_status == 0 && tick.frame() > lastTick) {
+      sim_status = 1;
+   }
+   lastTick = tick.frame();
 }
 
 void OnPhysiologyValue(AMM::PhysiologyValue& physiologyvalue, eprosima::fastrtps::SampleInfo_t* info){
@@ -438,6 +457,7 @@ int main(int argc, char *argv[]) {
       // Run the I/O context.
       // The call will return when the socket is closed.
       ioc.run();
+
       LOG_INFO << "Connection to iSimulate monitor closed.";
       ioc.reset();
    }
