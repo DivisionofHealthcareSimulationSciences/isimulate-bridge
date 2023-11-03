@@ -53,6 +53,8 @@ int64_t lastTick = 0;
 net::io_context ioc;
 auto ws_session = std::make_shared<websocket_session>(ioc); 
 bool try_reconnect = true;
+bool websocket_connected = false;
+bool monitor_initialized = false;
 
 std::string host = "";
 std::string port = "";
@@ -205,10 +207,15 @@ void onNewWebsocketMessage(const std::string body) {
    std::string type;
    Document document;
    document.Parse(body.c_str());
-   LOG_DEBUG << "iSimulate message: " << body ;
 
    if (document.HasMember("type") && document["type"].IsString()) {
       type = document["type"].GetString();
+      if (type.compare("DebriefPacket") == 0) {
+         // ignore debrief, only log message type
+         LOG_DEBUG << "iSimulate message: {\"type\": \"DebriefPacket\", ...}";
+         return;
+      }
+      LOG_DEBUG << "iSimulate message: " << body ;
       if (type.compare("SettingsRequestPacket") == 0) {
          writeSettingsPacket();
       } else if (type.compare("ScenarioRequestPacket") == 0) {
@@ -219,14 +226,33 @@ void onNewWebsocketMessage(const std::string body) {
          writePowerOnPacket();
          writeScenarioChangeStatePacket(sim_status);
          writeVisibilityPacket();
+         monitor_initialized = true;
          //writeNibpPacket();
          //writeChangeActionPacket();
+      } else if (type.compare("ScenarioCurrentStatePacket") == 0) {
+         // monitor sends this if it has already been initialized (and running or paused) when connection is established
+         // bridge module cannot distinguish between paused and reset/init state of sim on startup
+         // when sim is not running and monitor is paused assume the sim is paused
+         if (document.HasMember("scenarioState") && document["scenarioState"].IsInt()) {
+            int scenarioState = document["scenarioState"].GetInt();
+            if (scenarioState == 2 && sim_status == 0 ) writeScenarioChangeStatePacket(2);
+            else writeScenarioChangeStatePacket(sim_status);
+            monitor_initialized = true;
+         }
+      } else if (type.compare("DisconnectPacket") == 0) {
+         // monitor is closing websocket connection
+         // pending async_read returns with eof
+         // which should result in io context running out of work, returning and connection being reset
+         // ioc.stop();
       }
+   } else {
+      LOG_ERROR << "iSimulate message (no type): " << body ;
    }
 }
 
 // init iSimulate device
 void onWebsocketHandshake(const std::string body) {
+   websocket_connected = true;
    writeConnectionTypePacket(1);
    // iSimulate monitor should respond with settings request and scenario request
 }
@@ -263,7 +289,7 @@ void OnNewSimulationControl(AMM::SimulationControl& simControl, eprosima::fastrt
          nodeDataStorage.clear();
 
          sim_status = 0;
-         writeScenarioChangeStatePacket(2); // set monitor to pause state
+         writeScenarioChangeStatePacket(0); // set monitor to pause state
          writeConnectionTypePacket(1);
 
          LOG_INFO << "SimControl Message recieved; Reset sim.";
@@ -282,7 +308,9 @@ void OnNewTick(AMM::Tick& tick, eprosima::fastrtps::SampleInfo_t* info) {
    //if ( arguments.verbose )
    //   LOG_DEBUG << "Tick received!";
    if ( sim_status == 0 && tick.frame() > lastTick) {
+      LOG_DEBUG << "Tick received! sim_status:" << sim_status << "->1 lastTick:" << lastTick << " tick.frame(): " << tick.frame();
       sim_status = 1;
+      if ( websocket_connected && monitor_initialized ) writeScenarioChangeStatePacket(sim_status);
    }
    lastTick = tick.frame();
 }
@@ -304,8 +332,8 @@ void OnPhysiologyValue(AMM::PhysiologyValue& physiologyvalue, eprosima::fastrtps
          oss << std::fixed << physiologyvalue.value();
          nodeDataStorage["SIM_TIME"] = oss.str();
          //LOG_DEBUG << "sim time stringstream: " << oss.str();
-         // TODO: check for live websocket connection to monitor
-         writeChangeActionPacket();
+         // send data if websocket connection to monitor is live
+         if ( websocket_connected ) writeChangeActionPacket();
       }
    }
 
@@ -434,7 +462,7 @@ int main(int argc, char *argv[]) {
    while (try_reconnect) {
 
       // wait for updated service info
-      while (true) {
+      while (try_reconnect) {
          if ( monitor_port !=0 && monitor_service_new) {
             LOG_INFO << "Monitor port aquired: " << monitor_port;
             LOG_INFO << "Monitor address aquired: " << monitor_address;
@@ -459,6 +487,8 @@ int main(int argc, char *argv[]) {
       ioc.run();
 
       LOG_INFO << "Connection to iSimulate monitor closed.";
+      websocket_connected = false;
+      monitor_initialized = false;
       ioc.reset();
    }
 
