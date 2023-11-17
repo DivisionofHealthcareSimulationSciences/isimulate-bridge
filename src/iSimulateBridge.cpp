@@ -42,8 +42,14 @@ std::map<std::string, std::string> nodeDataStorage = {
       {"Respiration_EndTidalCarbonDioxide", "0"},
       {"Respiratory_Respiration_Rate", "0"},
       {"Energy_Core_Temperature", "0"},
-      {"SIM_TIME", "0"}
+      {"SIM_TIME", "0"},
    };
+
+// init monitor waveforms
+int ecgWaveform = 9;       // 9 -> Sinus
+int bpWaveform = 0;        // 0 -> Normal
+int spo2Waveform = 0;      // 0 -> Normal
+int etco2Waveform = 0;     // 0 -> Normal
 
 // initialize module state
 int sim_status = 0;  // 0 - initial/reset, 1 - running, 2 - paused
@@ -122,8 +128,11 @@ void writeChangeActionPacket() {
       "\"icp\":10,\"icpWaveform\":0,\"icpVisible\":true,\"icpAmplitude\": 2,\"icpVariation\": 1,"
       "\"icpLundbergAEnabled\": false,\"icpLundbergBEnabled\": false,"
       "\"papSys\":20,\"papDia\":10,\"papWaveform\": 0,\"papVisible\":true,\"papVariation\": 2,"
-      "\"ecgWaveform\": 9,\"bpWaveform\": 0,\"spo2Waveform\": 0,\"etco2Waveform\":0,"
-      "\"ecgVisible\": true,\"bpVisible\":true,\"spo2Visible\": true,"
+      "\"ecgWaveform\": " + std::to_string(ecgWaveform) +
+      ",\"bpWaveform\": " + std::to_string(bpWaveform) +
+      ",\"spo2Waveform\": " + std::to_string(spo2Waveform) +
+      ",\"etco2Waveform\": " + std::to_string(etco2Waveform) +
+      ",\"ecgVisible\": true,\"bpVisible\":true,\"spo2Visible\": true,"
       "\"etco2Visible\": true,\"rrVisible\": true,\"tempVisible\": true,"
       "\"custVisible1\": false,\"custVisible2\":false,\"custVisible3\":false,"
       "\"custLabel1\":\"\",\"custLabel2\":\"\",\"custLabel3\":\"\","
@@ -287,6 +296,11 @@ void OnNewSimulationControl(AMM::SimulationControl& simControl, eprosima::fastrt
 
          //TODO: clear data and send to monitor before stopping
          nodeDataStorage.clear();
+         // reset waveforms to default
+         ecgWaveform = 9;
+         bpWaveform = 0;
+         spo2Waveform = 0;
+         etco2Waveform = 0; 
 
          sim_status = 0;
          writeScenarioChangeStatePacket(0); // set monitor to pause state
@@ -356,9 +370,18 @@ void OnPhysiologyWaveform(AMM::PhysiologyWaveform &waveform, SampleInfo_t *info)
 }
 
 void OnNewRenderModification(AMM::RenderModification &rendMod, SampleInfo_t *info) {
-   //LOG_DEBUG << "Render Modification received:\n"
+   // LOG_DEBUG << "Render Modification received:\n"
    //          << "Type:      " << rendMod.type() << "\n"
    //          << "Data:      " << rendMod.data();
+   if ( rendMod.type()=="PATIENT_STATE_TACHYPNEA" ) {
+      etco2Waveform = 2;
+      LOG_INFO << "Patient entered state: Tachypnea. Setting EtCO2 waveform to 2 -> Obstructive 2";
+      // waveform type updated on monitor with next ChangeActionPacket
+   }
+   if ( rendMod.type()=="PATIENT_STATE_TACHYCARDIA" ) {
+      ecgWaveform = 14;
+      LOG_INFO << "Patient entered state: Tachycardia. Setting ECG waveform to 14 -> Ventricular Tachycardia";
+   }
 }
 
 void PublishOperationalDescription() {
@@ -466,6 +489,8 @@ int main(int argc, char *argv[]) {
          if ( monitor_port !=0 && monitor_service_new) {
             LOG_INFO << "Monitor port aquired: " << monitor_port;
             LOG_INFO << "Monitor address aquired: " << monitor_address;
+            if ( strlen(monitor_address) > 15 ) LOG_INFO << "Address too long (not IPv4): " << strlen(monitor_address);
+            LOG_INFO << "Monitor address length: " << strlen(monitor_address);
             host = monitor_address;
             port = std::to_string(monitor_port);
             monitor_service_new = false;
