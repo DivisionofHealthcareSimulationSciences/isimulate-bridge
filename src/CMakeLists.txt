@@ -18,6 +18,7 @@ target_link_libraries(
    PUBLIC Boost::thread
    PUBLIC avahi-client
    PUBLIC avahi-common
+   PUBLIC tinyxml2
 )
 
 install(TARGETS mohses_isimulate_bridge RUNTIME DESTINATION bin)

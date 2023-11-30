@@ -16,6 +16,9 @@
 #include "rapidjson/document.h"
 #include "rapidjson/writer.h"
 
+/// xml library
+#include "tinyxml2.h"
+
 #include "websocket_session.hpp"
 
 extern "C" {
@@ -26,6 +29,7 @@ extern "C" {
 using namespace AMM;
 using namespace std::chrono;
 using namespace rapidjson;
+using namespace tinyxml2;
 
 // declare DDSManager for this module
 const std::string moduleName = "iSimulate Bridge";
@@ -373,14 +377,57 @@ void OnNewRenderModification(AMM::RenderModification &rendMod, SampleInfo_t *inf
    // LOG_DEBUG << "Render Modification received:\n"
    //          << "Type:      " << rendMod.type() << "\n"
    //          << "Data:      " << rendMod.data();
-   if ( rendMod.type()=="PATIENT_STATE_TACHYPNEA" ) {
-      etco2Waveform = 2;
-      LOG_INFO << "Patient entered state: Tachypnea. Setting EtCO2 waveform to 2 -> Obstructive 2";
-      // waveform type updated on monitor with next ChangeActionPacket
-   }
+   // if ( rendMod.type()=="PATIENT_STATE_TACHYPNEA" ) {
+   //    etco2Waveform = 2;
+   //    LOG_INFO << "Patient entered state: Tachypnea. Setting EtCO2 waveform to 2 -> Obstructive 2";
+   //    // waveform type updated on monitor with next ChangeActionPacket
+   // }
    if ( rendMod.type()=="PATIENT_STATE_TACHYCARDIA" ) {
       ecgWaveform = 14;
       LOG_INFO << "Patient entered state: Tachycardia. Setting ECG waveform to 14 -> Ventricular Tachycardia";
+   }
+}
+
+//<?xml version="1.0" encoding="UTF-8"?><PhysiologyModification type="AirwayObstruction"><Severity>0.5</Severity></PhysiologyModification>
+void OnNewPhysiologyModification(AMM::PhysiologyModification &physMod, SampleInfo_t *info) {
+   LOG_DEBUG << "Physiology Modification received:\n"
+            << "Type:      " << physMod.type() << "\n"
+            << "Data:      " << physMod.data();
+  tinyxml2::XMLDocument doc;
+   doc.Parse(physMod.data().c_str());
+
+   if (doc.ErrorID() == 0) {
+      tinyxml2::XMLElement* pRoot;
+
+      pRoot = doc.FirstChildElement("PhysiologyModification");
+
+      while (pRoot) {
+         std::string pmType = pRoot->ToElement()->Attribute("type");
+         boost::algorithm::to_lower(pmType);
+         //LOG_INFO << "Physmod type " << pmType;
+
+         if (pmType == "airwayobstruction") {
+            // Type:      PhysiologyModification
+            // Data:      <?xml version="1.0" encoding="UTF-8"?><PhysiologyModification type="AirwayObstruction"><Severity>0.5</Severity></PhysiologyModification>
+            double pmSev = std::stod(pRoot->FirstChildElement("Severity")->ToElement()->GetText());
+            LOG_INFO << "Physmod: AirwayObstruction. Severity:" << pmSev;
+            if (pmSev > 0.6) {
+               etco2Waveform = 2;
+               LOG_INFO << "Setting EtCO2 waveform to 2 -> Obstructive 2";
+            } else if (pmSev > 0.2) {
+               etco2Waveform = 1;
+               LOG_INFO << "Setting EtCO2 waveform to 1 -> Obstructive 1";
+            } else {
+               etco2Waveform = 0;
+               LOG_INFO << "Setting EtCO2 waveform to 0 -> Normal";
+            }
+            // waveform type updated on monitor with next ChangeActionPacket
+            return;
+         }
+      }
+   } else {
+      LOG_ERROR << "Document parsing error, ID: " << doc.ErrorID();
+      doc.PrintError();
    }
 }
 
@@ -459,6 +506,9 @@ int main(int argc, char *argv[]) {
 
    mgr->InitializeRenderModification();
    mgr->CreateRenderModificationSubscriber(&OnNewRenderModification);
+
+   mgr->InitializePhysiologyModification();
+   mgr->CreatePhysiologyModificationSubscriber(&OnNewPhysiologyModification);
 
    m_uuid.id(mgr->GenerateUuidString());
 
