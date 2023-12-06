@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-extern char monitor_address[20];
+extern char monitor_address[30];
 extern uint16_t monitor_port;
 extern bool monitor_service_new;
 

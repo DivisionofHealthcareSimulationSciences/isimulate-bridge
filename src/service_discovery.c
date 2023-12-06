@@ -17,7 +17,7 @@
 
 static AvahiSimplePoll *simple_poll = NULL;
 
-char monitor_address[20];
+char monitor_address[30];
 uint16_t monitor_port = 0;
 bool monitor_service_new = false;
 

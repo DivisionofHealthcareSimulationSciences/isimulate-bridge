@@ -539,8 +539,8 @@ int main(int argc, char *argv[]) {
          if ( monitor_port !=0 && monitor_service_new) {
             LOG_INFO << "Monitor port aquired: " << monitor_port;
             LOG_INFO << "Monitor address aquired: " << monitor_address;
-            if ( strlen(monitor_address) > 15 ) LOG_INFO << "Address too long (not IPv4): " << strlen(monitor_address);
-            LOG_INFO << "Monitor address length: " << strlen(monitor_address);
+            if ( strlen(monitor_address) > 15 ) LOG_INFO << "Address invalid format (not IPv4): " << strlen(monitor_address);
+            else LOG_INFO << "Monitor address length: " << strlen(monitor_address);
             host = monitor_address;
             port = std::to_string(monitor_port);
             monitor_service_new = false;
