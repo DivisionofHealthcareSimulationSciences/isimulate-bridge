@@ -15,7 +15,7 @@ The iSimulate Bridge module also requires:
 ## Installation
 
 ```bash
-    $ git clone https://rainer-uw-edu@bitbucket.org/crestuw/isimulate-bridge.git
+    $ git clone https://github.com/DivisionofHealthcareSimulationSciences/isimulate-bridge.git
     $ cd isimulate-bridge
     $ mkdir build && cd build
     $ cmake ..
