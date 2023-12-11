@@ -390,10 +390,10 @@ void OnNewRenderModification(AMM::RenderModification &rendMod, SampleInfo_t *inf
 
 //<?xml version="1.0" encoding="UTF-8"?><PhysiologyModification type="AirwayObstruction"><Severity>0.5</Severity></PhysiologyModification>
 void OnNewPhysiologyModification(AMM::PhysiologyModification &physMod, SampleInfo_t *info) {
-   LOG_DEBUG << "Physiology Modification received:\n"
-            << "Type:      " << physMod.type() << "\n"
-            << "Data:      " << physMod.data();
-  tinyxml2::XMLDocument doc;
+   // LOG_DEBUG << "Physiology Modification received:\n"
+   //          << "Type:      " << physMod.type() << "\n"
+   //          << "Data:      " << physMod.data();
+   tinyxml2::XMLDocument doc;
    doc.Parse(physMod.data().c_str());
 
    if (doc.ErrorID() == 0) {
@@ -410,7 +410,7 @@ void OnNewPhysiologyModification(AMM::PhysiologyModification &physMod, SampleInf
             // Type:      PhysiologyModification
             // Data:      <?xml version="1.0" encoding="UTF-8"?><PhysiologyModification type="AirwayObstruction"><Severity>0.5</Severity></PhysiologyModification>
             double pmSev = std::stod(pRoot->FirstChildElement("Severity")->ToElement()->GetText());
-            LOG_INFO << "Physmod: AirwayObstruction. Severity:" << pmSev;
+            LOG_INFO << "Physiology Modification received: AirwayObstruction. Severity:" << pmSev;
             if (pmSev > 0.6) {
                etco2Waveform = 2;
                LOG_INFO << "Setting EtCO2 waveform to 2 -> Obstructive 2";
@@ -423,11 +423,16 @@ void OnNewPhysiologyModification(AMM::PhysiologyModification &physMod, SampleInf
             }
             // waveform type updated on monitor with next ChangeActionPacket
             return;
+         } else {
+            LOG_DEBUG << "Physiology Modification received:\n"
+                     << "Type:      " << pmType << "\n"
+                     << "Data:      " << physMod.data();
+            return;
          }
       }
    } else {
-      LOG_ERROR << "Document parsing error, ID: " << doc.ErrorID();
-      doc.PrintError();
+      //LOG_ERROR << "Document parsing error, ID: " << doc.ErrorID();
+      //doc.PrintError();
    }
 }
 
