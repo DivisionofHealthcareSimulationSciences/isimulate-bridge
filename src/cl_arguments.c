@@ -4,6 +4,7 @@
 struct arguments {
    int monitor;
    bool verbose;
+   bool autostart;
 } arguments;
 
 // set up command line option checking using argp.h
@@ -30,6 +31,7 @@ static char doc[] =
 static char args_doc[] = "";
 static struct argp_option options[] = {
     { "monitor",  'm', "MONITOR", 0, "Select monitor model by ID"},
+    { "autostart",'a', 0, 0, "Autostart monitor"},
     { "verbose",  'v', 0, 0, "Print extra data"},
     { 0 }
 };
@@ -45,6 +47,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
             argp_usage (state);
             return ARGP_ERR_UNKNOWN;
          }
+         break;
+      case 'a':
+         arguments->autostart = true;
          break;
       case 'v':
          arguments->verbose = true;
