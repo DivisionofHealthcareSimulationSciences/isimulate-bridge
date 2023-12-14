@@ -236,7 +236,7 @@ void onNewWebsocketMessage(const std::string body) {
          writeScenarioPacket();
          // then fire up monitor
          writeSyncTimesPacket();
-         writePowerOnPacket();
+         if (arguments.autostart) writePowerOnPacket();
          writeScenarioChangeStatePacket(sim_status);
          writeVisibilityPacket();
          monitor_initialized = true;
@@ -479,6 +479,7 @@ int main(int argc, char *argv[]) {
 
    // set default command line options. process.
    arguments.monitor = 3;
+   arguments.autostart = false;
    arguments.verbose = false;
    argp_parse(&argp, argc, argv, 0, 0, &arguments);
 
